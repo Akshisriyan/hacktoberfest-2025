@@ -1,7 +1,5 @@
 # Hacktoberfest 2025 Project Requirements
-
-# Core Python dependencies
-python>=3.8
+# This project requires Python 3.8 or higher
 
 # Development dependencies
 pytest>=7.0.0
