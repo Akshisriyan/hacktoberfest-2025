@@ -18,3 +18,8 @@ sphinx-rtd-theme>=1.2.0
 colorama>=0.4.6  # For colored console output
 rich>=13.0.0     # For beautiful terminal output
 click>=8.0.0     # Alternative CLI framework
+
+# Email notification dependencies
+PyJWT>=2.8.0     # For JWT token generation and validation
+python-dotenv>=1.0.0  # For environment variable management
+smtplib  # Standard library for email sending
