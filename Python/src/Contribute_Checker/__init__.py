@@ -22,3 +22,5 @@ __all__ = [
     "MetricsVisualizer",
     "CSVHandler"
 ]
+
+__all__ = ["Contributor", "ProjectTracker", "EmailNotifier", "PerformanceMetrics", "MetricsVisualizer"]
