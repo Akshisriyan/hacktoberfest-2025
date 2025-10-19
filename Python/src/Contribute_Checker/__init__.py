@@ -12,5 +12,13 @@ from .project_tracker import ProjectTracker
 from .email_notifier import EmailNotifier
 from .performance_metrics import PerformanceMetrics
 from .metrics_visualizer import MetricsVisualizer
+from .csv_handler import CSVHandler
 
-__all__ = ["Contributor", "ProjectTracker", "EmailNotifier", "PerformanceMetrics", "MetricsVisualizer"]
+__all__ = [
+    "Contributor",
+    "ProjectTracker",
+    "EmailNotifier",
+    "PerformanceMetrics",
+    "MetricsVisualizer",
+    "CSVHandler"
+]
