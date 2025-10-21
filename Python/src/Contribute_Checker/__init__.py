@@ -25,6 +25,7 @@ __all__ = [
     "SearchEngine",
     "SearchType",
     "SortOrder"
+    "CSVHandler"
 ]
 
 __all__ = ["Contributor", "ProjectTracker", "EmailNotifier", "PerformanceMetrics", "MetricsVisualizer"]
