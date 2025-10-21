@@ -15,6 +15,7 @@ from .metrics_visualizer import MetricsVisualizer
 from .csv_handler import CSVHandler
 from .search_engine import SearchEngine, SearchType, SortOrder
 from .backup_engine import BackupEngine, BackupType, BackupFormat
+from .repo_statistics import RepositoryStats
 
 __all__ = [
     "Contributor",
@@ -25,6 +26,10 @@ __all__ = [
     "CSVHandler",
     "SearchEngine",
     "SearchType",
-    "SortOrder"
+    "SortOrder",
+    "BackupEngine",
+    "BackupType",
+    "BackupFormat",
+    "RepositoryStats"
 ]
 
