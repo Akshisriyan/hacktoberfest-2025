@@ -13,6 +13,7 @@ from .email_notifier import EmailNotifier
 from .performance_metrics import PerformanceMetrics
 from .metrics_visualizer import MetricsVisualizer
 from .csv_handler import CSVHandler
+from .search_engine import SearchEngine, SearchType, SortOrder
 
 __all__ = [
     "Contributor",
@@ -20,5 +21,8 @@ __all__ = [
     "EmailNotifier",
     "PerformanceMetrics",
     "MetricsVisualizer",
-    "CSVHandler"
+    "CSVHandler",
+    "SearchEngine",
+    "SearchType",
+    "SortOrder"
 ]
