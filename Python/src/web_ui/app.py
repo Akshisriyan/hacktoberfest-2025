@@ -15,6 +15,7 @@ from flask_cors import CORS
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from Contribute_Checker import ProjectTracker, Contributor
+from Contribute_Checker.notification_system import notification_manager, NotificationType, NotificationPriority
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'hacktoberfest-2025-secret-key'
@@ -41,7 +42,8 @@ def get_type_color(contribution_type):
 def inject_helpers():
     """Inject helper functions into all templates."""
     return {
-        'get_type_color': get_type_color
+        'get_type_color': get_type_color,
+        'notification_count': lambda username=None: len(notification_manager.get_user_notifications(username or 'anonymous', unread_only=True)) if username else 0
     }
 
 
@@ -120,6 +122,12 @@ def add_contributor():
             return redirect(url_for('contributors'))
         except Exception as e:
             flash(f'Error adding contributor: {str(e)}', 'error')
+        else:
+            # Create welcome notification
+            notification_manager.create_welcome_notification(
+                contributor.github_username, 
+                contributor.name
+            )
     
     return render_template('add_contributor.html', form=form)
 
@@ -147,6 +155,20 @@ def add_contribution():
             )
             if success:
                 flash('Successfully added contribution!', 'success')
+                
+                # Check for milestone achievements
+                contributor = tracker.get_contributor(form.github_username.data)
+                if contributor:
+                    contribution_count = contributor.get_contribution_count()
+                    is_complete = contribution_count >= 4
+                    
+                    # Create milestone notification
+                    notification_manager.create_milestone_notification(
+                        form.github_username.data,
+                        contribution_count,
+                        is_complete
+                    )
+                
                 return redirect(url_for('index'))
             else:
                 flash('Failed to add contribution. Contributor not found.', 'error')
@@ -196,6 +218,279 @@ def api_contributor(username):
 def api_leaderboard():
     """API endpoint for leaderboard data."""
     return jsonify(tracker.get_leaderboard())
+
+
+@app.route('/notifications')
+def notifications():
+    """Page showing user notifications."""
+    # For demo purposes, we'll use 'anonymous' user
+    # In a real app, you'd get this from user session/auth
+    username = request.args.get('user', 'anonymous')
+    
+    user_notifications = notification_manager.get_user_notifications(username)
+    stats = notification_manager.get_notification_stats(username)
+    
+    return render_template('notifications.html', 
+                         notifications=user_notifications, 
+                         stats=stats,
+                         username=username)
+
+
+@app.route('/api/notifications')
+def api_notifications():
+    """API endpoint for user notifications."""
+    username = request.args.get('user', 'anonymous')
+    unread_only = request.args.get('unread_only', 'false').lower() == 'true'
+    limit = request.args.get('limit', type=int)
+    
+    user_notifications = notification_manager.get_user_notifications(
+        username, unread_only=unread_only, limit=limit
+    )
+    
+    return jsonify([notification.to_dict() for notification in user_notifications])
+
+
+@app.route('/api/notifications/stats')
+def api_notification_stats():
+    """API endpoint for notification statistics."""
+    username = request.args.get('user', 'anonymous')
+    stats = notification_manager.get_notification_stats(username)
+    return jsonify(stats)
+
+
+@app.route('/api/notifications/<notification_id>/read', methods=['POST'])
+def api_mark_notification_read(notification_id):
+    """API endpoint to mark a notification as read."""
+    success = notification_manager.mark_as_read(notification_id)
+    return jsonify({'success': success})
+
+
+@app.route('/api/notifications/<notification_id>/dismiss', methods=['POST'])
+def api_dismiss_notification(notification_id):
+    """API endpoint to dismiss a notification."""
+    success = notification_manager.mark_as_dismissed(notification_id)
+    return jsonify({'success': success})
+
+
+@app.route('/api/notifications/mark-all-read', methods=['POST'])
+def api_mark_all_read():
+    """API endpoint to mark all notifications as read for a user."""
+    username = request.args.get('user', 'anonymous')
+    
+    user_notifications = notification_manager.get_user_notifications(username)
+    count = 0
+    
+    for notification in user_notifications:
+        if not notification.read:
+            notification_manager.mark_as_read(notification.id)
+            count += 1
+    
+    return jsonify({'success': True, 'count': count})
+
+
+@app.route('/api/notifications/clear-all', methods=['POST'])
+def api_clear_all_notifications():
+    """API endpoint to clear all notifications for a user."""
+    username = request.args.get('user', 'anonymous')
+    
+    user_notifications = notification_manager.get_user_notifications(username)
+    count = 0
+    
+    for notification in user_notifications:
+        notification_manager.mark_as_dismissed(notification.id)
+        count += 1
+    
+    return jsonify({'success': True, 'count': count})
+
+
+@app.route('/api/notifications/create', methods=['POST'])
+def api_create_notification():
+    """API endpoint to create a new notification."""
+    data = request.get_json()
+    
+    try:
+        notification_type = NotificationType(data.get('type', 'info'))
+        priority = NotificationPriority(data.get('priority', 'normal'))
+        
+        notification_id = notification_manager.create_notification(
+            title=data['title'],
+            message=data['message'],
+            notification_type=notification_type,
+            priority=priority,
+            username=data.get('username'),
+            expires_in_hours=data.get('expires_in_hours', 24),
+            action_url=data.get('action_url'),
+            action_text=data.get('action_text'),
+            metadata=data.get('metadata')
+        )
+        
+        return jsonify({'success': True, 'notification_id': notification_id})
+    
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
+@app.route('/api/notifications/system', methods=['POST'])
+def api_create_system_notification():
+    """API endpoint to create a system-wide notification."""
+    data = request.get_json()
+    
+    try:
+        priority = NotificationPriority(data.get('priority', 'normal'))
+        
+        notification_id = notification_manager.create_system_notification(
+            title=data['title'],
+            message=data['message'],
+            priority=priority,
+            expires_in_hours=data.get('expires_in_hours', 48)
+        )
+        
+        return jsonify({'success': True, 'notification_id': notification_id})
+    
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
+@app.route('/achievement-badges')
+def achievement_badges():
+    """Display the achievement badges page."""
+    return render_template('achievement_badges.html')
+
+
+@app.route('/api/badges')
+def api_badges():
+    """API endpoint to get all achievement badges data."""
+    # In a real implementation, this would fetch from a database
+    badges_data = {
+        'earned': [
+            {
+                'id': 'first-contribution',
+                'name': 'First Contribution',
+                'description': 'Made your first contribution to Hacktoberfest!',
+                'icon': 'fas fa-seedling',
+                'category': 'contribution',
+                'earned_date': '2024-10-02'
+            },
+            {
+                'id': 'streak-master',
+                'name': 'Streak Master',
+                'description': 'Maintained a 5-day contribution streak!',
+                'icon': 'fas fa-fire',
+                'category': 'contribution',
+                'earned_date': '2024-10-07'
+            },
+            {
+                'id': 'bug-hunter',
+                'name': 'Bug Hunter',
+                'description': 'Found and fixed 3 bugs in different projects!',
+                'icon': 'fas fa-bug',
+                'category': 'contribution',
+                'earned_date': '2024-10-12'
+            }
+        ],
+        'in_progress': [
+            {
+                'id': 'feature-creator',
+                'name': 'Feature Creator',
+                'description': 'Implement 5 new features across projects',
+                'icon': 'fas fa-plus-circle',
+                'category': 'contribution',
+                'progress': {'current': 2, 'total': 5}
+            },
+            {
+                'id': 'documentation-guru',
+                'name': 'Documentation Guru',
+                'description': 'Improve documentation in 10 repositories',
+                'icon': 'fas fa-book',
+                'category': 'contribution',
+                'progress': {'current': 1, 'total': 10}
+            },
+            {
+                'id': 'team-player',
+                'name': 'Team Player',
+                'description': 'Collaborate on 3 different team projects',
+                'icon': 'fas fa-handshake',
+                'category': 'engagement',
+                'progress': {'current': 1, 'total': 3}
+            },
+            {
+                'id': 'milestone-achiever',
+                'name': 'Milestone Achiever',
+                'description': 'Complete all 4 required Hacktoberfest PRs',
+                'icon': 'fas fa-flag-checkered',
+                'category': 'special',
+                'progress': {'current': 3, 'total': 4}
+            },
+            {
+                'id': 'super-contributor',
+                'name': 'Super Contributor',
+                'description': 'Make 20+ contributions in one month',
+                'icon': 'fas fa-rocket',
+                'category': 'contribution',
+                'progress': {'current': 5, 'total': 20}
+            },
+            {
+                'id': 'hacktoberfest-hero',
+                'name': 'Hacktoberfest Hero',
+                'description': 'Complete Hacktoberfest and earn 10+ badges',
+                'icon': 'fas fa-crown',
+                'category': 'special',
+                'progress': {'current': 3, 'total': 10}
+            }
+        ],
+        'locked': [
+            {
+                'id': 'test-champion',
+                'name': 'Test Champion',
+                'description': 'Add comprehensive tests to 5 projects',
+                'icon': 'fas fa-vial',
+                'category': 'contribution',
+                'progress': {'current': 0, 'total': 5}
+            },
+            {
+                'id': 'early-bird',
+                'name': 'Early Bird',
+                'description': 'Start contributing in the first week of October',
+                'icon': 'fas fa-sun',
+                'category': 'special',
+                'status': 'missed'
+            },
+            {
+                'id': 'mentor',
+                'name': 'Mentor',
+                'description': 'Help 5 new contributors with their first PRs',
+                'icon': 'fas fa-chalkboard-teacher',
+                'category': 'engagement',
+                'progress': {'current': 0, 'total': 5}
+            }
+        ]
+    }
+    
+    return jsonify(badges_data)
+
+
+@app.route('/api/badges/earn/<badge_id>', methods=['POST'])
+def api_earn_badge(badge_id):
+    """API endpoint to earn a badge (for testing/simulation)."""
+    # In a real implementation, this would validate the achievement
+    # and update the database
+    
+    # Create a notification for the earned badge
+    try:
+        notification_manager.create_notification(
+            title=f"🎉 Badge Earned!",
+            message=f"Congratulations! You've earned the {badge_id.replace('-', ' ').title()} badge!",
+            notification_type=NotificationType.ACHIEVEMENT,
+            priority=NotificationPriority.HIGH,
+            username=request.args.get('username', 'anonymous'),
+            action_url=url_for('achievement_badges'),
+            action_text='View Badge'
+        )
+        
+        return jsonify({'success': True, 'message': f'Badge {badge_id} earned!'})
+    
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
 
 
 if __name__ == '__main__':
